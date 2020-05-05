@@ -1,11 +1,10 @@
 defmodule PdfGenerator.PathAgent do
   require Logger
-  defstruct [
-    wkhtml_path: nil,
-    pdftk_path:  nil,
-    chrome_path: nil,
-    node_path:   nil,
-  ]
+
+  defstruct wkhtml_path: nil,
+            pdftk_path: nil,
+            chrome_path: nil,
+            node_path: nil
 
   @moduledoc """
   Will check for system executables at startup time and store paths. If
@@ -18,35 +17,35 @@ defmodule PdfGenerator.PathAgent do
 
   @name __MODULE__
 
-  def start_link( path_options ) do
-    Agent.start_link( __MODULE__, :init_opts, [ path_options ], name: @name  )
+  def start_link(path_options) do
+    Agent.start_link(__MODULE__, :init_opts, [path_options], name: @name)
   end
 
-  def init_opts( paths_from_options ) do
+  def init_opts(paths_from_options) do
     # options override system default paths
     options =
-      [
-        wkhtml_path: System.find_executable("wkhtmltopdf"),
-        pdftk_path:  System.find_executable("pdftk"),
-        chrome_path: System.find_executable("chrome-headless-render-pdf"),
-        node_path:   System.find_executable("nodejs") || System.find_executable("node"),
-      ]
-      ++ paths_from_options
+      ([
+         wkhtml_path: System.find_executable("wkhtmltopdf"),
+         pdftk_path: System.find_executable("pdftk"),
+         chrome_path: System.find_executable("chrome-headless-render-pdf"),
+         node_path: System.find_executable("nodejs") || System.find_executable("node")
+       ] ++
+         paths_from_options)
       |> Enum.dedup()
-      |> Enum.filter( fn { _, v } -> v != nil end )
+      |> Enum.filter(fn {_, v} -> v != nil end)
       |> raise_or_continue()
 
-    Map.merge %PdfGenerator.PathAgent{}, Enum.into( options, %{} )
+    Map.merge(%PdfGenerator.PathAgent{}, Enum.into(options, %{}))
   end
 
   @doc "Stops agent, returns :ok"
   def stop do
-    Agent.stop @name
+    Agent.stop(@name)
   end
 
   @doc "Returns path state as struct"
   def get do
-    Agent.get( @name, fn( data ) -> data end )
+    Agent.get(@name, fn data -> data end)
   end
 
   @doc """
@@ -64,21 +63,28 @@ defmodule PdfGenerator.PathAgent do
 
     raise_on_wkhtml_missing = options[:raise_on_missing_wkhtmltopdf_binary]
     raise_on_chrome_missing = options[:raise_on_missing_chrome_binary]
-    raise_on_any_missing =    options[:raise_on_missing_binaries]
+    raise_on_any_missing = options[:raise_on_missing_binaries]
 
     maybe_raise(:wkhtml, raise_on_wkhtml_missing, wkhtml_exists)
     maybe_raise(:chrome, raise_on_chrome_missing, chrome_exists)
-    maybe_raise(:any,    raise_on_any_missing, wkhtml_exists or chrome_exists)
+    maybe_raise(:any, raise_on_any_missing, wkhtml_exists or chrome_exists)
 
     options
   end
 
-  defp maybe_raise(generator,  _config_says_raise = true,  _executable_exists = false), do: generator |> missing_message() |> raise()
-  defp maybe_raise(generator,  _config_says_raise = false, _executable_exists = false), do: generator |> missing_message() |> Logger.warn()
-  defp maybe_raise(_generator, _config_says_raise = _,     _executable_exists = _    ), do: :noop
+  defp maybe_raise(generator, _config_says_raise = true, _executable_exists = false),
+    do: generator |> missing_message() |> raise()
+
+  defp maybe_raise(generator, _config_says_raise = false, _executable_exists = false),
+    do: generator |> missing_message() |> Logger.warn()
+
+  defp maybe_raise(_generator, _config_says_raise = _, _executable_exists = _), do: :noop
 
   defp missing_message(:wkhtml), do: "wkhtmltopdf executable was not found on your system"
-  defp missing_message(:chrome), do: "chrome-headless-render-pdf executable was not found on your system"
-  defp missing_message(:any),    do: "neither wkhtmltopdf or chrome-headless-render-pdf executables were found on your system"
 
+  defp missing_message(:chrome),
+    do: "chrome-headless-render-pdf executable was not found on your system"
+
+  defp missing_message(:any),
+    do: "neither wkhtmltopdf or chrome-headless-render-pdf executables were found on your system"
 end

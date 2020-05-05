@@ -1,5 +1,4 @@
 defmodule PdfGenerator do
-
   require Logger
 
   @vsn "0.6.0"
@@ -57,22 +56,26 @@ defmodule PdfGenerator do
   # See http://elixir-lang.org/docs/stable/elixir/Application.html
   # for more information on OTP Applications
   def start(_type, _args) do
-      import Supervisor.Spec, warn: false
+    import Supervisor.Spec, warn: false
 
-      children = [
-        # Define workers and child supervisors to be supervised
-        # worker(TestApp.Worker, [arg1, arg2, arg3])
-        worker(
-          PdfGenerator.PathAgent, [[
-            wkhtml_path:                         Application.get_env(:pdf_generator, :wkhtml_path),
-            pdftk_path:                          Application.get_env(:pdf_generator, :pdftk_path),
-            raise_on_missing_wkhtmltopdf_binary: Application.get_env(:pdf_generator, :raise_on_missing_wkhtmltopdf_binary, true),
-          ]]
-        )
-      ]
+    children = [
+      # Define workers and child supervisors to be supervised
+      # worker(TestApp.Worker, [arg1, arg2, arg3])
+      worker(
+        PdfGenerator.PathAgent,
+        [
+          [
+            wkhtml_path: Application.get_env(:pdf_generator, :wkhtml_path),
+            pdftk_path: Application.get_env(:pdf_generator, :pdftk_path),
+            raise_on_missing_wkhtmltopdf_binary:
+              Application.get_env(:pdf_generator, :raise_on_missing_wkhtmltopdf_binary, true)
+          ]
+        ]
+      )
+    ]
 
-      opts = [strategy: :one_for_one, name: PdfGenerator.Supervisor]
-      Supervisor.start_link(children, opts)
+    opts = [strategy: :one_for_one, name: PdfGenerator.Supervisor]
+    Supervisor.start_link(children, opts)
   end
 
   def defaults(), do: [generator: :wkhtmltopdf, page_size: "A4"]
@@ -113,47 +116,53 @@ defmodule PdfGenerator do
   )
   """
 
-  @type url           :: binary()
-  @type html          :: binary()
+  @type url :: binary()
+  @type html :: binary()
   @type pdf_file_path :: binary()
-  @type content       :: html | {:ok, url}
-  @type reason        :: atom() | {atom(), any}
-  @type opts          :: keyword()
-  @type path          :: binary()
-  @type html_path     :: path
-  @type pdf_path      :: path
-  @type generator     :: :wkhtmltopdf | :chrome
+  @type content :: html | {atom(), any}
+  @type reason :: atom() | {atom(), any}
+  @type opts :: keyword()
+  @type path :: binary()
+  @type html_path :: path
+  @type pdf_path :: path
+  @type generator :: :wkhtmltopdf | :chrome
 
   @spec generate(content, opts) :: {:ok, pdf_file_path} | {:error, reason}
   def generate(content, opts \\ []) do
-
     options = Keyword.merge(defaults(), opts)
 
-    generator     = options[:generator]
+    generator = options[:generator]
 
     open_password = options[:open_password]
     edit_password = options[:edit_password]
-    delete_temp   = options[:delete_temporary]
+    delete_temp = options[:delete_temporary]
 
-    with {html_file, pdf_file}       <- make_file_paths(options),
-         :ok                         <- maybe_write_html(content, html_file),
-         {executable, arguments}     <- make_command(generator, options, content, {html_file, pdf_file}),
-         {:cmd, {stderr, exit_code}} <- {:cmd, System.cmd(executable, arguments, stderr_to_stdout: true)},       # unfortuantely wkhtmltopdf returns 0 on errors as well :-/
-         {:result_ok, true, _err}    <- {:result_ok, result_ok(generator, stderr, exit_code), stderr},           # so we inspect stderr instead
-         {:rm, :ok}                  <- {:rm, maybe_delete_temp(delete_temp, html_file)},
-         {:ok, encrypted_pdf}        <- maybe_encrypt_pdf(pdf_file, open_password, edit_password) do
+    with {html_file, pdf_file} <- make_file_paths(options),
+         :ok <- maybe_write_html(content, html_file),
+         {executable, arguments} <-
+           make_command(generator, options, content, {html_file, pdf_file}),
+         # unfortuantely wkhtmltopdf returns 0 on errors as well :-/
+         {:cmd, {stderr, exit_code}} <-
+           {:cmd, System.cmd(executable, arguments, stderr_to_stdout: true)},
+         # so we inspect stderr instead
+         {:result_ok, true, _err} <-
+           {:result_ok, result_ok(generator, stderr, exit_code), stderr},
+         {:rm, :ok} <- {:rm, maybe_delete_temp(delete_temp, html_file)},
+         {:ok, encrypted_pdf} <- maybe_encrypt_pdf(pdf_file, open_password, edit_password) do
       {:ok, encrypted_pdf}
     else
-      {:error, reason}     -> {:error, reason}
+      {:error, reason} -> {:error, reason}
       {:result_ok, _, err} -> {:error, {:generator_failed, err}}
-      reason               -> {:error, reason}
+      reason -> {:error, reason}
     end
   end
 
   @spec maybe_write_html(content, path()) :: :ok | {:error, reason}
-  def maybe_write_html({:url, _url}, _html_file_path),                      do: :ok
-  def maybe_write_html({:html, html}, html_file_path),                      do: File.write(html_file_path, html)
-  def maybe_write_html(html,          html_file_path) when is_binary(html), do: maybe_write_html({:html, html}, html_file_path)
+  def maybe_write_html({:url, _url}, _html_file_path), do: :ok
+  def maybe_write_html({:html, html}, html_file_path), do: File.write(html_file_path, html)
+
+  def maybe_write_html(html, html_file_path) when is_binary(html),
+    do: maybe_write_html({:html, html}, html_file_path)
 
   @spec make_file_paths(keyword()) :: {html_path, pdf_path}
   def make_file_paths(options) do
@@ -170,20 +179,24 @@ defmodule PdfGenerator do
   A5. Defaults to A4 sizes. In inches. Because chrome wants imperial.
   """
   def dimensions_for(%{page_width: width, page_height: height}), do: {width, height}
-  def dimensions_for(%{page_size: "A4"}),                        do: {"8.26772", "11.695"}
-  def dimensions_for(%{page_size: "A5"}),                        do: {"5.8475",  "8.26772"}
-  def dimensions_for(%{page_size: "letter"}),                    do: {"8.5",     "11"}
-  def dimensions_for(_map),                                      do: dimensions_for(%{page_size: "A4"})
+  def dimensions_for(%{page_size: "A4"}), do: {"8.26772", "11.695"}
+  def dimensions_for(%{page_size: "A5"}), do: {"5.8475", "8.26772"}
+  def dimensions_for(%{page_size: "letter"}), do: {"8.5", "11"}
+  def dimensions_for(_map), do: dimensions_for(%{page_size: "A4"})
 
   @spec make_command(generator, opts, content, {html_path, pdf_path}) :: {path, list()}
   def make_command(:chrome, options, content, {html_path, pdf_path}) do
-    chrome_executable  = PdfGenerator.PathAgent.get.chrome_path
-    node_executable    = PdfGenerator.PathAgent.get.node_path
-    disable_sandbox    = Application.get_env(:pdf_generator, :disable_chrome_sandbox) || options[:no_sandbox]
+    chrome_executable = PdfGenerator.PathAgent.get().chrome_path
+    node_executable = PdfGenerator.PathAgent.get().node_path
+
+    disable_sandbox =
+      Application.get_env(:pdf_generator, :disable_chrome_sandbox) || options[:no_sandbox]
 
     # needs `make priv/node_modules` to be run when building
     priv_dir = :code.priv_dir(:pdf_generator) |> to_string()
-    js_file  = "#{priv_dir}/node_modules/chrome-headless-render-pdf/dist/cli/chrome-headless-render-pdf.js"
+
+    js_file =
+      "#{priv_dir}/node_modules/chrome-headless-render-pdf/dist/cli/chrome-headless-render-pdf.js"
 
     {executable, executable_args} =
       if options[:prefer_system_executable] && is_binary(chrome_executable) do
@@ -194,55 +207,71 @@ defmodule PdfGenerator do
 
     {width, height} = make_dimensions(options)
     more_params = options[:shell_params] || []
+
     source =
       case content do
-        {:url,  url} -> url
-        _html        -> "file://" <> html_path
+        {:url, url} -> url
+        _html -> "file://" <> html_path
       end
-    arguments = List.flatten([
-      executable_args,
-      [
-        "--url", source,
-        "--pdf", pdf_path,
-        "--paper-width",   width,
-        "--paper-height", height,
-      ],
-      more_params,
-      if(disable_sandbox, do: ["--chrome-option=--no-sandbox"], else: [])
-    ])
+
+    arguments =
+      List.flatten([
+        executable_args,
+        [
+          "--url",
+          source,
+          "--pdf",
+          pdf_path,
+          "--paper-width",
+          width,
+          "--paper-height",
+          height
+        ],
+        more_params,
+        if(disable_sandbox, do: ["--chrome-option=--no-sandbox"], else: [])
+      ])
+
     {executable, arguments} |> inspect() |> Logger.debug()
     {executable, arguments}
   end
 
   def make_command(:wkhtmltopdf, options, content, {html_path, pdf_path}) do
-    executable  = PdfGenerator.PathAgent.get.wkhtml_path
+    executable = PdfGenerator.PathAgent.get().wkhtml_path
+
     source =
       case content do
         {:url, url} -> url
-        _html       -> html_path
+        _html -> html_path
       end
+
     shell_params = options[:shell_params] || []
-    arguments = List.flatten([
-      shell_params,
-      "--page-size", options[:page_size] || "A4",
-      source, pdf_path
-    ])
+
+    arguments =
+      List.flatten([
+        shell_params,
+        "--page-size",
+        options[:page_size] || "A4",
+        source,
+        pdf_path
+      ])
+
     # for wkhtmltopdf we support prefixes like ["xvfb-run", "-a"] to precede the actual command
     {executable, arguments} =
       case get_command_prefix(options) do
-        nil                    -> {executable, arguments}
+        nil -> {executable, arguments}
         [prefix | prefix_args] -> {prefix, prefix_args ++ [executable] ++ arguments}
-        prefix                 -> {prefix, [executable | arguments]}
+        prefix -> {prefix, [executable | arguments]}
       end
+
     {executable, arguments} |> inspect() |> Logger.debug()
     {executable, arguments}
   end
 
-  defp maybe_delete_temp(true,    file), do: File.rm(file)
+  defp maybe_delete_temp(true, file), do: File.rm(file)
   defp maybe_delete_temp(_falsy, _file), do: :ok
 
   def maybe_encrypt_pdf(pdf_file, open_password, edit_password)
-  when is_binary(open_password) or is_binary(edit_password) do
+      when is_binary(open_password) or is_binary(edit_password) do
     encrypt_pdf(pdf_file, open_password, edit_password)
   end
 
@@ -250,8 +279,8 @@ defmodule PdfGenerator do
     {:ok, pdf_file}
   end
 
-  defp result_ok(:chrome,     _string,          0), do: true
-  defp result_ok(:chrome,     _string, _exit_code), do: false
+  defp result_ok(:chrome, _string, 0), do: true
+  defp result_ok(:chrome, _string, _exit_code), do: false
   defp result_ok(:wkhtmltopdf, string, _exit_code), do: String.match?(string, ~r/Done/ms)
 
   defp get_command_prefix(options) do
@@ -259,25 +288,31 @@ defmodule PdfGenerator do
   end
 
   defp generate_filebase(nil), do: generate_filebase(PdfGenerator.Random.string())
-  defp generate_filebase(filename), do: Path.join(System.tmp_dir, filename)
+  defp generate_filebase(filename), do: Path.join(System.tmp_dir(), filename)
 
-  def encrypt_pdf(pdf_input_path, user_pw, owner_pw ) do
-    pdftk_path      = PdfGenerator.PathAgent.get.pdftk_path
-    pdf_output_file = Path.join System.tmp_dir, PdfGenerator.Random.string() <> ".pdf"
+  def encrypt_pdf(pdf_input_path, user_pw, owner_pw) do
+    pdftk_path = PdfGenerator.PathAgent.get().pdftk_path
+    pdf_output_file = Path.join(System.tmp_dir(), PdfGenerator.Random.string() <> ".pdf")
 
     pdftk_args = [
       pdf_input_path,
-      "output", pdf_output_file,
-      "owner_pw", random_if_undef(owner_pw),
-      "user_pw",  random_if_undef(user_pw),
-      "encrypt_128bit", "allow", "Printing", "CopyContents"
+      "output",
+      pdf_output_file,
+      "owner_pw",
+      random_if_undef(owner_pw),
+      "user_pw",
+      random_if_undef(user_pw),
+      "encrypt_128bit",
+      "allow",
+      "Printing",
+      "CopyContents"
     ]
 
     {stderr, exit_code} = System.cmd(pdftk_path, pdftk_args, stderr_to_stdout: true)
 
     case exit_code do
-      0 ->  {:ok, pdf_output_file}
-      _ ->  {:error, {:pdftk, stderr}}
+      0 -> {:ok, pdf_output_file}
+      _ -> {:error, {:pdftk, stderr}}
     end
   end
 
@@ -292,16 +327,17 @@ defmodule PdfGenerator do
   pdf file.
   """
   def generate_binary(html, options \\ []) do
-    result = generate html, options
+    result = generate(html, options)
+
     case result do
-      {:ok, filename}  -> {:ok, filename |> read_and_maybe_delete(options) }
+      {:ok, filename} -> {:ok, filename |> read_and_maybe_delete(options)}
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp read_and_maybe_delete(filename, options) do
-    content = filename |> File.read!
-    if Keyword.get(options, :delete_temporary), do: filename |> File.rm
+    content = filename |> File.read!()
+    if Keyword.get(options, :delete_temporary), do: filename |> File.rm()
     content
   end
 
@@ -310,9 +346,10 @@ defmodule PdfGenerator do
   error.
   """
   def generate_binary!(html, options \\ []) do
-    result = generate_binary html, options
+    result = generate_binary(html, options)
+
     case result do
-      {:ok, content}   -> content
+      {:ok, content} -> content
       {:error, reason} -> raise "in-place generation failed: " <> reason
     end
   end
@@ -321,9 +358,10 @@ defmodule PdfGenerator do
   Same as generate but returns PDF file name only (raises on error).
   """
   def generate!(html, options \\ []) do
-    result = generate html, options
+    result = generate(html, options)
+
     case result do
-      {:ok, filename}  -> filename
+      {:ok, filename} -> filename
       {:error, reason} -> raise "HTML generation failed: " <> reason
     end
   end
